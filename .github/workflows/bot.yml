@@ -1,0 +1,40 @@
+name: 🤖 Slack A/B Test Bot
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 */5 * * *'
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    name: Run Slack Bot
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+
+    steps:
+      - name: 📥 코드 체크아웃
+        uses: actions/checkout@v4
+
+      - name: 🐍 Python 3.11 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 📦 의존성 설치
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 🤖 봇 실행
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_APP_TOKEN: ${{ secrets.SLACK_APP_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: python src/app.py
+
+      - name: 🔄 종료 알림
+        if: always()
+        run: echo "봇 종료. 5시간 후 자동 재시작됩니다."
