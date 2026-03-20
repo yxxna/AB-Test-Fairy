@@ -5,9 +5,7 @@ from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 
 sys.path.insert(0, os.path.dirname(__file__))
-
 from analyzer import analyze_ab_test
-from image_generator import generate_improved_image
 
 logging.basicConfig(
     level=logging.INFO,
@@ -17,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 app = App(token=os.environ["SLACK_BOT_TOKEN"])
 pending_images = {}
+
 
 @app.event("message")
 def handle_message(body, say, logger):
@@ -70,40 +69,19 @@ def handle_message(body, say, logger):
 
             logger.info("A/B 테스트 분석 시작...")
             result = analyze_ab_test(img_a, img_b, slack_headers)
-            say(text=result["message"])
 
-            say(blocks=[{
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": "🎨 *개선안 이미지를 생성 중이에요...*\nDALL-E 3가 최적화된 UI를 그리고 있어요!"
-                }
-            }])
+            # 분석 결과 전송
+            say(text=result["analysis_message"])
 
-            logger.info("개선안 이미지 생성 시작...")
-            improved_url = generate_improved_image(result["improvement_prompt"])
+            # 디자인 개선 가이드 전송
+            say(text=result["guide_message"])
 
-            if improved_url:
-                say(blocks=[
-                    {
-                        "type": "header",
-                        "text": {"type": "plain_text", "text": "✨ 개선된 UI 디자인"}
-                    },
-                    {
-                        "type": "image",
-                        "image_url": improved_url,
-                        "alt_text": "개선된 UI 디자인"
-                    },
-                    {
-                        "type": "context",
-                        "elements": [{"type": "mrkdwn", "text": "_GPT-4o Vision 분석 + DALL-E 3 생성_"}]
-                    }
-                ])
-                logger.info("✅ A/B 테스트 완료!")
+            logger.info("✅ A/B 테스트 완료!")
 
         except Exception as e:
             logger.error(f"오류 발생: {e}", exc_info=True)
             say(f"❌ 분석 중 오류가 발생했어요: `{str(e)}`\n다시 시도해주세요!")
+
 
 if __name__ == "__main__":
     logger.info("⚡ Slack A/B Test Bot 시작 중...")

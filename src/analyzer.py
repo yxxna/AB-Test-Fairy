@@ -7,6 +7,7 @@ from openai import OpenAI
 logger = logging.getLogger(__name__)
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
+
 def download_image_as_base64(file_info: dict, headers: dict) -> str:
     url = file_info.get("url_private_download") or file_info.get("url_private")
     if not url:
@@ -16,14 +17,16 @@ def download_image_as_base64(file_info: dict, headers: dict) -> str:
     response.raise_for_status()
     return base64.b64encode(response.content).decode("utf-8")
 
+
 def analyze_ab_test(img_a_info: dict, img_b_info: dict, headers: dict) -> dict:
     img_a_b64 = download_image_as_base64(img_a_info, headers)
     img_b_b64 = download_image_as_base64(img_b_info, headers)
     img_a_mime = img_a_info.get("mimetype", "image/png")
     img_b_mime = img_b_info.get("mimetype", "image/png")
 
-    logger.info("GPT-4o Vision으로 분석 요청 중...")
+    logger.info("GPT-4o Vision으로 A/B 분석 요청 중...")
 
+    # 1차: A/B 비교 분석
     analysis_response = client.chat.completions.create(
         model="gpt-4o",
         messages=[
@@ -66,36 +69,48 @@ def analyze_ab_test(img_a_info: dict, img_b_info: dict, headers: dict) -> dict:
     )
 
     analysis_text = analysis_response.choices[0].message.content
-    logger.info("분석 완료. 개선 프롬프트 생성 중...")
+    logger.info("A/B 분석 완료. 디자인 개선 가이드 생성 중...")
 
-    prompt_response = client.chat.completions.create(
+    # 2차: 구체적인 디자인 개선 가이드
+    guide_response = client.chat.completions.create(
         model="gpt-4o",
-        messages=[{
-            "role": "user",
-            "content": (
-                f"다음 A/B 테스트 분석 결과를 바탕으로, 두 디자인의 장점을 결합한 "
-                "최적의 UI를 DALL-E 3로 생성하기 위한 영어 프롬프트를 작성해주세요.\n"
-                "색상, 레이아웃, 버튼 스타일, 타이포그래피 등 구체적으로 작성하세요.\n"
-                "프롬프트 텍스트만 출력하세요 (설명 없이).\n\n"
-                f"분석 결과:\n{analysis_text}"
-            )
-        }],
-        max_tokens=400
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    "다음 A/B 테스트 분석 결과를 바탕으로, "
+                    "실제 디자이너/개발자가 바로 적용할 수 있는 구체적인 개선 가이드를 작성해주세요.\n\n"
+                    "다음 항목을 포함해서 슬랙 마크다운으로 작성하세요:\n"
+                    "1. 🎨 색상 개선 (구체적인 HEX 코드 포함)\n"
+                    "2. 📐 간격/여백 개선 (px 단위로 구체적으로)\n"
+                    "3. 🔤 타이포그래피 개선 (폰트 크기, 굵기)\n"
+                    "4. 🔘 버튼/CTA 개선 (크기, 색상, 텍스트)\n"
+                    "5. ⚡ 우선순위 적용 순서 (1순위~3순위)\n\n"
+                    f"분석 결과:\n{analysis_text}"
+                )
+            }
+        ],
+        max_tokens=1000
     )
 
-    improvement_prompt = prompt_response.choices[0].message.content
+    design_guide = guide_response.choices[0].message.content
 
-    formatted_message = (
+    # 슬랙 메시지 구성
+    analysis_message = (
         "━━━━━━━━━━━━━━━━━━━━━━\n"
         "🔬 *A/B 테스트 분석 결과*\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"{analysis_text}\n\n"
+        f"{analysis_text}"
+    )
+
+    guide_message = (
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "_분석 완료! 이제 개선안 이미지를 생성할게요 🎨_"
+        "📋 *구체적인 디자인 개선 가이드*\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"{design_guide}"
     )
 
     return {
-        "message": formatted_message,
-        "improvement_prompt": improvement_prompt,
-        "raw_analysis": analysis_text
+        "analysis_message": analysis_message,
+        "guide_message": guide_message,
     }
