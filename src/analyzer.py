@@ -17,6 +17,63 @@ def download_image_as_base64(file_info: dict, headers: dict) -> str:
     return base64.b64encode(response.content).decode("utf-8")
 
 
+# ── 단일 이미지 분석 ──
+def analyze_single(img_info: dict, headers: dict, context: str = "") -> str:
+    b64 = download_image_as_base64(img_info, headers)
+    mime = img_info.get("mimetype", "image/png")
+
+    if context:
+        user_prompt = (
+            f"사용자 질문: {context}\n\n"
+            "위 질문에 맞게 이 UI 화면을 분석해주세요. "
+            "UX/UI 전문가 관점에서 구체적으로 답변해주세요."
+        )
+    else:
+        user_prompt = (
+            "이 UI 화면을 UX/UI 전문가 관점에서 전반적으로 분석해주세요.\n\n"
+            "아래 항목을 포함해주세요:\n"
+            "1. 시각적 계층구조\n"
+            "2. 색상 대비와 가독성\n"
+            "3. CTA 명확성\n"
+            "4. 개선이 필요한 포인트 3가지"
+        )
+
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "당신은 10년 경력의 UX/UI 전문가입니다. "
+                    "슬랙 마크다운 형식으로 친절하고 구체적으로 답변하세요."
+                )
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": user_prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{mime};base64,{b64}",
+                            "detail": "high"
+                        }
+                    }
+                ]
+            }
+        ],
+        max_tokens=1500
+    )
+
+    return (
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "🖼 *단일 화면 UX 분석*\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        + response.choices[0].message.content
+    )
+
+
+# ── A/B 테스트 (2장) ──
 def analyze_ab_test(img_a_info: dict, img_b_info: dict, headers: dict, context: str = "") -> dict:
     img_a_b64 = download_image_as_base64(img_a_info, headers)
     img_b_b64 = download_image_as_base64(img_b_info, headers)
@@ -101,6 +158,7 @@ def analyze_ab_test(img_a_info: dict, img_b_info: dict, headers: dict, context: 
     }
 
 
+# ── UX 플로우 분석 (3장+) ──
 def analyze_flow(images: list, headers: dict, context: str = "") -> dict:
     image_contents = []
     for img_info in images:
@@ -127,7 +185,7 @@ def analyze_flow(images: list, headers: dict, context: str = "") -> dict:
                     "2. 사용자 피로도 - 단계 수, 인지 부하, 이탈 위험 구간\n"
                     "3. 만족감과 감정 곡선 - 각 단계에서 예상되는 감정 변화\n"
                     "4. 전환율 예측 - 각 단계별 이탈 가능성 (높음/중간/낮음)\n"
-                    "5. 접근성과 대상 사용자 적합성 - 타겟 유저 기준 평가\n"
+                    "5. 접근성과 대상 사용자 적합성\n"
                     "6. 가장 큰 문제 구간 - 즉시 개선이 필요한 화면 지목\n"
                     "7. 잘 된 점 - 유지해야 할 UX 요소\n\n"
                     "마지막에 전체 플로우 UX 점수 (100점 만점)"
